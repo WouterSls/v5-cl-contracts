@@ -20,9 +20,9 @@ contract SimpleImpl {
     /**
     require(msg.sender == ENTRYPOINT); // protect
     */
-   // Can we call executor contract here? or we implement executor logic on this contract?
+    // Can we call executor contract here? or we implement executor logic on this contract?
     (bool ok, ) = target.call{value: value}(data);
-
+    // implement executor logic in this contract
     require(ok);
   }
 }
