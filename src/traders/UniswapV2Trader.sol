@@ -26,28 +26,28 @@ contract UniswapV2Trader {
         address to = EXECUTOR_ADDRESS;
         uint256 deadline = params.expiry;
         
-        uint256 amountIn = params.routeData.amountIn;
+        uint256 amountIn = params.amountIn;
 
         if (params.tradeType == ExecutorValidation.TradeType.ETH_INPUT_TOKEN_OUTPUT) {
-            uint[] memory amounts = IUniswapV2Router02(UNISWAP_V2_ROUTER).swapExactETHForTokens{value: amountIn}(
+            uint[] memory amounts = IUniswapV2Router02(UNISWAP_V2_ROUTER).swapExactETHForTokens{value: params.amountIn}(
                 params.amountOutMin,
                 params.routeData.path,
                 to,
                 deadline
             );
         } else if (params.tradeType == ExecutorValidation.TradeType.TOKEN_INPUT_ETH_OUTPUT) {
-            IERC20(params.tokenIn).approve(UNISWAP_V2_ROUTER, amountIn);
+            IERC20(params.tokenIn).approve(UNISWAP_V2_ROUTER, params.amountIn);
             uint[] memory amounts = IUniswapV2Router02(UNISWAP_V2_ROUTER).swapExactTokensForETH(
-                amountIn,
+                params.amountIn,
                 params.amountOutMin,
                 params.routeData.path,
                 to,
                 deadline
             );
         } else if (params.tradeType == ExecutorValidation.TradeType.TOKEN_INPUT_TOKEN_OUTPUT) {
-            IERC20(params.tokenIn).approve(UNISWAP_V2_ROUTER, amountIn);
+            IERC20(params.tokenIn).approve(UNISWAP_V2_ROUTER, params.amountIn);
             uint[] memory amounts = IUniswapV2Router02(UNISWAP_V2_ROUTER).swapExactTokensForTokens(
-                amountIn,
+                params.amountIn,
                 params.amountOutMin,
                 params.routeData.path,
                 to,
