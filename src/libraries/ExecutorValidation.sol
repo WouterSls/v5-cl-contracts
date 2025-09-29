@@ -16,16 +16,6 @@ library ExecutorValidation {
         bytes orderSignature;
         ISignatureTransfer.PermitTransferFrom permitHash; 
         bytes permitSignature;
-        uint256 executorFee; //maybe encode in contract and be able to change with function?
-    }
-
-    struct RouteData {
-        uint256 amountIn;
-        ITrader.Protocol protocol;
-        address[] path;
-        uint24 fee;
-        bool isMultiHop;
-        bytes encodedPath;
     }
 
     struct Order {
@@ -41,6 +31,14 @@ library ExecutorValidation {
     bytes32 internal constant ORDER_TYPEHASH = keccak256(
         "Order(address maker,address inputToken,uint256 inputAmount,address outputToken,uint256 minAmountOut,uint256 expiry,uint256 nonce)"
     );
+
+    struct RouteData {
+        ITrader.Protocol protocol;
+        address[] path;
+        uint24 fee;
+        bool isMultiHop;
+        bytes encodedPath;
+    }
 
     error InvalidRouteData();
     error InvalidTradeType();

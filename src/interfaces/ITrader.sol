@@ -26,6 +26,7 @@ interface ITrader {
 
     struct TradeParameters {
         address tokenIn;
+        uint256 amountIn;
         address tokenOut;
         uint256 amountOutMin;
         uint256 expiry;

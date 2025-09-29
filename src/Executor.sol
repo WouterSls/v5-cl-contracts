@@ -25,6 +25,9 @@ contract Executor is EIP712, ReentrancyGuard, Ownable {
     string private constant NAME = "EVM Trading Engine";
     string private constant VERSION = "1";
 
+    uint16 internal constant FEE_DENOMINATOR = 10_000;
+    uint16 internal constant MAX_FEE_BPS = 1_000; // 10% cap
+
     //address private constant PERMIT2 = 0x000000000022D473030F116dDEE9F6B43aC78BA3;
     address public immutable PERMIT2;
 
@@ -33,15 +36,18 @@ contract Executor is EIP712, ReentrancyGuard, Ownable {
 
     mapping(address => mapping(uint256 => bool)) public usedNonce;
 
+    event TraderRegistryUpdated(address indexed newRegistry, address indexed updater);
+    event ExecutorFeeUpdated(uint256 newFeeBps, address indexed updater);
+    event ExecutorTipped(address indexed recipient, uint256 amount);
+    event TradeExecuted(address indexed maker, address indexed trader, uint256 amountIn, uint256 amountOut, uint256 amountTipped);
+
     error InvalidTrader();
     error CallFailed();
     error InvalidRouter();
     error InsufficientOutput();
+    error InvalidFee();
 
-    event TraderRegistryUpdated(address indexed newRegistry, address indexed updater);
-    event TradeExecuted(address indexed maker, address indexed trader, uint256 amountIn, uint256 amountOut, uint256 amountTipped);
-
-    constructor(address _permit2) EIP712(NAME, VERSION) Ownable(msg.sender) {
+    constructor(address _permit2, address initialOwner) EIP712(NAME, VERSION) Ownable(initialOwner) {
         PERMIT2 = _permit2;
     }
 
@@ -65,6 +71,7 @@ contract Executor is EIP712, ReentrancyGuard, Ownable {
 
         ITrader.TradeParameters memory tradeParameters = ITrader.TradeParameters({
             tokenIn: trade.orderHash.inputToken,
+            amountIn: trade.orderHash.inputAmount,
             tokenOut: trade.orderHash.outputToken,
             amountOutMin: trade.orderHash.minAmountOut,
             expiry: trade.orderHash.expiry,
@@ -78,15 +85,13 @@ contract Executor is EIP712, ReentrancyGuard, Ownable {
 
         if (amountOut < trade.orderHash.minAmountOut) revert InsufficientOutput();
 
-        uint256 remainingAmount = _tipExecutor(amountOut, tradeType);
+        uint256 remainingAmount = _tipExecutor(trade.orderHash.outputToken, amountOut, tradeType);
         uint256 tippedAmount = amountOut - remainingAmount;
 
-        _transferToMaker(remainingAmount, tradeType);
+        _transferToMaker(trade.orderHash.maker, trade.orderHash.outputToken, remainingAmount, tradeType);
 
         emit TradeExecuted(trade.orderHash.maker, traderInfo.implementation, trade.orderHash.inputAmount, remainingAmount, tippedAmount);
     }
-
-
 
     function cancelNonce(uint256 nonce) external {
         usedNonce[msg.sender][nonce] = true;
@@ -99,7 +104,9 @@ contract Executor is EIP712, ReentrancyGuard, Ownable {
     }
 
     function updateExecutorFee(uint256 newFee) external onlyOwner {
+        if (newFee >= MAX_FEE_BPS) revert InvalidFee();
         executorFee = newFee;
+        emit ExecutorFeeUpdated(newFee, msg.sender);
     }
 
     function emergencyWithdrawToken(address token, address to) external onlyOwner {
@@ -135,12 +142,31 @@ contract Executor is EIP712, ReentrancyGuard, Ownable {
         );
     }
 
-    function _tipExecutor(uint256 amountOut, ExecutorValidation.TradeType tradeType) internal returns (uint256) {
+    function _tipExecutor(address token, uint256 amountOut,  ExecutorValidation.TradeType tradeType) internal returns (uint256) {
+        if (executorFee == 0) return amountOut;
 
+        uint256 feeAmount = (amountOut * executorFee) / FEE_DENOMINATOR;
+        if (feeAmount == 0) return amountOut;
+
+        address recipient = msg.sender;
+
+        if (tradeType == ExecutorValidation.TradeType.TOKEN_INPUT_ETH_OUTPUT) {
+            (bool sent,) = recipient.call{value: feeAmount}("");
+            require(sent, "tip ETH failed");
+        } else {
+            IERC20(token).safeTransfer(recipient, feeAmount);
+        }
+
+        return amountOut - feeAmount;
     }
 
-    function _transferToMaker(uint256 remainingAmount, ExecutorValidation.TradeType tradeType) internal {
-
+    function _transferToMaker(address maker, address token, uint256 amount, ExecutorValidation.TradeType tradeType) internal {
+        if (tradeType == ExecutorValidation.TradeType.TOKEN_INPUT_ETH_OUTPUT) {
+            (bool sent,) = maker.call{value: amount}("");
+            require(sent, "tip ETH failed");
+        } else {
+            IERC20(token).safeTransfer(maker, amount);
+        }
     }
 
     receive() external payable {}
