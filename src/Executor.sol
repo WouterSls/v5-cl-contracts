@@ -39,7 +39,9 @@ contract Executor is EIP712, ReentrancyGuard, Ownable {
     event TraderRegistryUpdated(address indexed newRegistry, address indexed updater);
     event ExecutorFeeUpdated(uint256 newFeeBps, address indexed updater);
     event ExecutorTipped(address indexed recipient, uint256 amount);
-    event TradeExecuted(address indexed maker, address indexed trader, uint256 amountIn, uint256 amountOut, uint256 amountTipped);
+    event TradeExecuted(
+        address indexed maker, address indexed trader, uint256 amountIn, uint256 amountOut, uint256 amountTipped
+    );
 
     error InvalidTrader();
     error CallFailed();
@@ -56,41 +58,44 @@ contract Executor is EIP712, ReentrancyGuard, Ownable {
      * @param trade the trade to execute
      * @param routeData Route information for trade execution
      */
-    function executeTrade(
-        ExecutorValidation.Trade calldata trade,
-        ExecutorValidation.RouteData calldata routeData
-    ) external nonReentrant {
-        ExecutorValidation.validateInputsAndBusinessLogic(trade, routeData, usedNonce);
-        ExecutorValidation.validateSignatures(trade, _domainSeparatorV4());
-        ExecutorValidation.TradeType tradeType = ExecutorValidation.determineTradeType(trade, routeData);
+    function executeTrade(ExecutorValidation.Trade calldata trade, ExecutorValidation.RouteData calldata routeData)
+        external
+        nonReentrant
+    {
+        //ExecutorValidation.validateInputsAndBusinessLogic(trade, routeData, usedNonce);
+        //ExecutorValidation.validateSignatures(trade, _domainSeparatorV4());
+        //ExecutorValidation.TradeType tradeType = ExecutorValidation.determineTradeType(trade, routeData);
 
-        ITrader.TraderInfo memory traderInfo = traderRegistry.getTrader(routeData.protocol);
-        ExecutorValidation.validateTrader(routeData, traderInfo);
+        //ITrader.TraderInfo memory traderInfo = traderRegistry.getTrader(routeData.protocol);
+        //ExecutorValidation.validateTrader(routeData, traderInfo);
 
         usedNonce[trade.orderHash.maker][trade.orderHash.nonce] = true;
 
-        ITrader.TradeParameters memory tradeParameters = ITrader.TradeParameters({
-            tokenIn: trade.orderHash.inputToken,
-            amountIn: trade.orderHash.inputAmount,
-            tokenOut: trade.orderHash.outputToken,
-            amountOutMin: trade.orderHash.minAmountOut,
-            expiry: trade.orderHash.expiry,
-            tradeType: tradeType,
-            routeData: routeData
-        });
+        address trader = msg.sender;
+        _transferPermittedWitnessToTrader(trade, trader);
 
-       _transferPermittedToTrader(trade, traderInfo.implementation);
+        //ITrader.TradeParameters memory tradeParameters = ITrader.TradeParameters({
+        //    tokenIn: trade.orderHash.inputToken,
+        //    amountIn: trade.orderHash.inputAmount,
+        //    tokenOut: trade.orderHash.outputToken,
+        //    amountOutMin: trade.orderHash.minAmountOut,
+        //    expiry: trade.orderHash.expiry,
+        //    tradeType: tradeType,
+        //    routeData: routeData
+        //});
 
-        uint256 amountOut = ITrader(traderInfo.implementation).trade(tradeParameters);
+        //uint256 amountOut = ITrader(traderInfo.implementation).trade(tradeParameters);
 
-        if (amountOut < trade.orderHash.minAmountOut) revert InsufficientOutput();
+        //if (amountOut < trade.orderHash.minAmountOut) revert InsufficientOutput();
 
-        uint256 remainingAmount = _tipExecutor(trade.orderHash.outputToken, amountOut, tradeType);
-        uint256 tippedAmount = amountOut - remainingAmount;
+        //uint256 remainingAmount = _tipExecutor(trade.orderHash.outputToken, amountOut, tradeType);
+        //uint256 tippedAmount = amountOut - remainingAmount;
 
-        _transferToMaker(trade.orderHash.maker, trade.orderHash.outputToken, remainingAmount, tradeType);
+        //_transferToMaker(trade.orderHash.maker, trade.orderHash.outputToken, remainingAmount, tradeType);
 
-        emit TradeExecuted(trade.orderHash.maker, traderInfo.implementation, trade.orderHash.inputAmount, remainingAmount, tippedAmount);
+        //emit TradeExecuted(
+        //    trade.orderHash.maker, traderInfo.implementation, trade.orderHash.inputAmount, remainingAmount, tippedAmount
+        //);
     }
 
     function cancelNonce(uint256 nonce) external {
@@ -129,20 +134,43 @@ contract Executor is EIP712, ReentrancyGuard, Ownable {
             deadline: trade.permitHash.deadline
         });
 
-        ISignatureTransfer.SignatureTransferDetails memory transferDetails  = ISignatureTransfer.SignatureTransferDetails({
-            to: trader,
-            requestedAmount: trade.orderHash.inputAmount
-        });
+        ISignatureTransfer.SignatureTransferDetails memory transferDetails =
+            ISignatureTransfer.SignatureTransferDetails({to: trader, requestedAmount: trade.orderHash.inputAmount});
 
-        ISignatureTransfer(PERMIT2).permitTransferFrom(
-            permit,
+        ISignatureTransfer(PERMIT2).permitTransferFrom(permit, transferDetails, trade.orderHash.maker, trade.signature);
+    }
+
+    function _transferPermittedWitnessToTrader(ExecutorValidation.Trade calldata trade, address trader) internal {
+        ISignatureTransfer.SignatureTransferDetails memory transferDetails =
+            ISignatureTransfer.SignatureTransferDetails({to: trader, requestedAmount: trade.orderHash.inputAmount});
+
+        bytes32 witness = keccak256(
+            abi.encode(
+                ExecutorValidation.ORDER_TYPEHASH,
+                trade.orderHash.maker,
+                trade.orderHash.inputToken,
+                trade.orderHash.inputAmount,
+                trade.orderHash.outputToken,
+                trade.orderHash.minAmountOut,
+                trade.orderHash.expiry,
+                trade.orderHash.nonce
+            )
+        );
+
+        ISignatureTransfer(PERMIT2).permitWitnessTransferFrom(
+            trade.permitHash,
             transferDetails,
-            trade.orderHash.maker, 
-            trade.permitSignature
+            trade.orderHash.maker, // owner: should equal the signer of the permit
+            witness,
+            ExecutorValidation.WITNESS_TYPE_STRING,
+            trade.signature
         );
     }
 
-    function _tipExecutor(address token, uint256 amountOut,  ExecutorValidation.TradeType tradeType) internal returns (uint256) {
+    function _tipExecutor(address token, uint256 amountOut, ExecutorValidation.TradeType tradeType)
+        internal
+        returns (uint256)
+    {
         if (executorFee == 0) return amountOut;
 
         uint256 feeAmount = (amountOut * executorFee) / FEE_DENOMINATOR;
@@ -160,7 +188,9 @@ contract Executor is EIP712, ReentrancyGuard, Ownable {
         return amountOut - feeAmount;
     }
 
-    function _transferToMaker(address maker, address token, uint256 amount, ExecutorValidation.TradeType tradeType) internal {
+    function _transferToMaker(address maker, address token, uint256 amount, ExecutorValidation.TradeType tradeType)
+        internal
+    {
         if (tradeType == ExecutorValidation.TradeType.TOKEN_INPUT_ETH_OUTPUT) {
             (bool sent,) = maker.call{value: amount}("");
             require(sent, "tip ETH failed");
@@ -171,4 +201,3 @@ contract Executor is EIP712, ReentrancyGuard, Ownable {
 
     receive() external payable {}
 }
-

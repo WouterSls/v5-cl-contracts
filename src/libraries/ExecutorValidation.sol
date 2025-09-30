@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT 
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
 import {ITrader} from "../interfaces/ITrader.sol";
@@ -12,10 +12,9 @@ library ExecutorValidation {
     }
 
     struct Trade {
-        Order orderHash;
-        bytes orderSignature;
-        ISignatureTransfer.PermitTransferFrom permitHash; 
-        bytes permitSignature;
+        Order order;
+        ISignatureTransfer.PermitTransferFrom permit;
+        bytes signature;
     }
 
     struct Order {
@@ -32,6 +31,9 @@ library ExecutorValidation {
         "Order(address maker,address inputToken,uint256 inputAmount,address outputToken,uint256 minAmountOut,uint256 expiry,uint256 nonce)"
     );
 
+    string public constant WITNESS_TYPE_STRING =
+        "Order witness)Order(address maker,address inputToken,uint256 inputAmount,address outputToken,uint256 minAmountOut,uint256 expiry,uint256 nonce)TokenPermissions(address token,uint256 amount)";
+
     struct RouteData {
         ITrader.Protocol protocol;
         address[] path;
@@ -47,31 +49,22 @@ library ExecutorValidation {
         Trade calldata trade,
         RouteData calldata routeData,
         mapping(address => mapping(uint256 => bool)) storage usedNonces
-    ) internal view {
-    }
+    ) internal view {}
 
-    function validateSignatures(
-        Trade calldata trade,
-        bytes32 domainSeparator
-    ) internal view {
-    }
+    function validateSignatures(Trade calldata trade, bytes32 domainSeparator) internal view {}
 
-    function validateTrader(
-        RouteData calldata routeData,
-        ITrader.TraderInfo memory traderInfo
-    ) internal view {
-    }
+    function validateTrader(RouteData calldata routeData, ITrader.TraderInfo memory traderInfo) internal view {}
 
     function determineTradeType(Trade calldata trade, RouteData calldata routeData) internal pure returns (TradeType) {
         address inputToken = routeData.path[0];
         address outputToken = routeData.path[routeData.path.length - 1];
 
-        if (inputToken != trade.orderHash.inputToken) revert InvalidRouteData();
-        if (outputToken != trade.orderHash.outputToken) revert InvalidRouteData();
-    
+        if (inputToken != trade.order.inputToken) revert InvalidRouteData();
+        if (outputToken != trade.order.outputToken) revert InvalidRouteData();
+
         if (inputToken == address(0) && outputToken != address(0)) {
-            return TradeType.ETH_INPUT_TOKEN_OUTPUT; 
-        } else if (inputToken != address(0) && outputToken != address(0)){
+            return TradeType.ETH_INPUT_TOKEN_OUTPUT;
+        } else if (inputToken != address(0) && outputToken != address(0)) {
             return TradeType.TOKEN_INPUT_TOKEN_OUTPUT;
         } else if (inputToken != address(0) && outputToken == address(0)) {
             return TradeType.TOKEN_INPUT_ETH_OUTPUT;
