@@ -69,7 +69,7 @@ contract Executor is EIP712, ReentrancyGuard, Ownable {
         //ITrader.TraderInfo memory traderInfo = traderRegistry.getTrader(routeData.protocol);
         //ExecutorValidation.validateTrader(routeData, traderInfo);
 
-        usedNonce[trade.orderHash.maker][trade.orderHash.nonce] = true;
+        usedNonce[trade.order.maker][trade.order.nonce] = true;
 
         address trader = msg.sender;
         _transferPermittedWitnessToTrader(trade, trader);
@@ -124,43 +124,27 @@ contract Executor is EIP712, ReentrancyGuard, Ownable {
         }
     }
 
-    function _transferPermittedToTrader(ExecutorValidation.Trade calldata trade, address trader) internal {
-        ISignatureTransfer.PermitTransferFrom memory permit = ISignatureTransfer.PermitTransferFrom({
-            permitted: ISignatureTransfer.TokenPermissions({
-                token: trade.permitHash.permitted.token,
-                amount: trade.permitHash.permitted.amount
-            }),
-            nonce: trade.permitHash.nonce,
-            deadline: trade.permitHash.deadline
-        });
-
-        ISignatureTransfer.SignatureTransferDetails memory transferDetails =
-            ISignatureTransfer.SignatureTransferDetails({to: trader, requestedAmount: trade.orderHash.inputAmount});
-
-        ISignatureTransfer(PERMIT2).permitTransferFrom(permit, transferDetails, trade.orderHash.maker, trade.signature);
-    }
-
     function _transferPermittedWitnessToTrader(ExecutorValidation.Trade calldata trade, address trader) internal {
         ISignatureTransfer.SignatureTransferDetails memory transferDetails =
-            ISignatureTransfer.SignatureTransferDetails({to: trader, requestedAmount: trade.orderHash.inputAmount});
+            ISignatureTransfer.SignatureTransferDetails({to: trader, requestedAmount: trade.order.inputAmount});
 
         bytes32 witness = keccak256(
             abi.encode(
                 ExecutorValidation.ORDER_TYPEHASH,
-                trade.orderHash.maker,
-                trade.orderHash.inputToken,
-                trade.orderHash.inputAmount,
-                trade.orderHash.outputToken,
-                trade.orderHash.minAmountOut,
-                trade.orderHash.expiry,
-                trade.orderHash.nonce
+                trade.order.maker,
+                trade.order.inputToken,
+                trade.order.inputAmount,
+                trade.order.outputToken,
+                trade.order.minAmountOut,
+                trade.order.expiry,
+                trade.order.nonce
             )
         );
 
         ISignatureTransfer(PERMIT2).permitWitnessTransferFrom(
-            trade.permitHash,
+            trade.permit,
             transferDetails,
-            trade.orderHash.maker, // owner: should equal the signer of the permit
+            trade.order.maker,
             witness,
             ExecutorValidation.WITNESS_TYPE_STRING,
             trade.signature
