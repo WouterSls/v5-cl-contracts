@@ -11,7 +11,7 @@ import {ERC20Mock} from "../lib/openzeppelin-contracts/contracts/mocks/token/ERC
 
 contract DeployExecutorLocal is Script {
     //address constant PERMIT2_ADDRESS = 0x000000000022D473030F116dDEE9F6B43aC78BA3;
-    address constant PERMIT2_ADDRESS = 0x04Bf6dd19092d8DC89dE2499a037958296D20E49;
+    address constant PERMIT2_ADDRESS = 0xBE05d211eD3fd34A1624060419358AA073957faC;
 
     function run() external returns (Executor) {
         uint256 pk = vm.envUint("LOCAL_DEPLOYER_KEY");
@@ -51,10 +51,6 @@ contract DeployExecutorLocal is Script {
         console.log("EXECUTOR ADDRESS:");
         console.log(address(executor));
         console.log();
-
-
-
-
 
         return executor;
     }
