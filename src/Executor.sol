@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import {EIP712} from "../lib/openzeppelin-contracts/contracts/utils/cryptography/EIP712.sol";
 import {SafeERC20} from "../lib/openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ReentrancyGuard} from "../lib/openzeppelin-contracts/contracts/utils/ReentrancyGuard.sol";
 import {IERC20} from "../lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
@@ -19,7 +18,7 @@ import {ExecutorValidation} from "./libraries/ExecutorValidation.sol";
  * @notice Executes signed off-chain orders with validation libraries
  * @dev Clean separation of concerns with modular validation
  */
-contract Executor is EIP712, ReentrancyGuard, Ownable {
+contract Executor is ReentrancyGuard, Ownable {
     using SafeERC20 for IERC20;
 
     string private constant NAME = "EVM Trading Engine";
@@ -40,7 +39,7 @@ contract Executor is EIP712, ReentrancyGuard, Ownable {
     event ExecutorFeeUpdated(uint256 newFeeBps, address indexed updater);
     event ExecutorTipped(address indexed recipient, uint256 amount);
     event TradeExecuted(
-        address indexed maker, address indexed trader, uint256 amountIn, uint256 amountOut, uint256 amountTipped
+        address indexed maker, address indexed inputToken, address indexed outputToken, string traderStrat, uint256 amountIn, uint256 amountOut, uint256 amountTipped
     );
 
     error InvalidTrader();
@@ -49,7 +48,7 @@ contract Executor is EIP712, ReentrancyGuard, Ownable {
     error InsufficientOutput();
     error InvalidFee();
 
-    constructor(address _permit2, address initialOwner) EIP712(NAME, VERSION) Ownable(initialOwner) {
+    constructor(address _permit2, address initialOwner) Ownable(initialOwner) {
         PERMIT2 = _permit2;
     }
 
@@ -62,7 +61,7 @@ contract Executor is EIP712, ReentrancyGuard, Ownable {
         external
         nonReentrant
     {
-        //ExecutorValidation.validateInputsAndBusinessLogic(trade, routeData, usedNonce);
+        ExecutorValidation.validateInputsAndBusinessLogic(trade, routeData, usedNonce);
         //ExecutorValidation.validateSignatures(trade, _domainSeparatorV4());
         //ExecutorValidation.TradeType tradeType = ExecutorValidation.determineTradeType(trade, routeData);
 
