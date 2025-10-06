@@ -16,7 +16,7 @@ contract DeployExecutorBase is Script {
     // Base token addresses
     address constant WETH = 0x4200000000000000000000000000000000000006;
     address constant USDC = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;
-    address constant USDbC = 0xd9aAEc86B65D86f6A7B5B1b0c42FFA531710b6CA; // Bridged USDC
+    address constant USDBC = 0xd9aAEc86B65D86f6A7B5B1b0c42FFA531710b6CA; // Bridged USDC
     address constant DAI = 0x50c5725949A6F0c72E6C4a641F24049A917DB0Cb;
     address constant AERO = 0x940181a94A35A4569E4529A3CDfB74e38FD98631;
     address constant VIRTUAL = 0x0b3e328455c4059EEb9e3f84b5543F74E24e7E1b;
@@ -33,7 +33,7 @@ contract DeployExecutorBase is Script {
         address[] memory whitelist = new address[](6);
         whitelist[0] = WETH;
         whitelist[1] = USDC;
-        whitelist[2] = USDbC;
+        whitelist[2] = USDBC;
         whitelist[3] = DAI;
         whitelist[4] = AERO;
         whitelist[5] = VIRTUAL;
@@ -54,7 +54,7 @@ contract DeployExecutorBase is Script {
         console.log("=== Whitelisted Tokens ===");
         console.log("WETH:", WETH, executor.whitelistedTokens(WETH));
         console.log("USDC:", USDC, executor.whitelistedTokens(USDC));
-        console.log("USDbC:", USDbC, executor.whitelistedTokens(USDbC));
+        console.log("USDbC:", USDBC, executor.whitelistedTokens(USDBC));
         console.log("DAI:", DAI, executor.whitelistedTokens(DAI));
         console.log("AERO:", AERO, executor.whitelistedTokens(AERO));
         console.log("VIRTUAL:", VIRTUAL, executor.whitelistedTokens(VIRTUAL));

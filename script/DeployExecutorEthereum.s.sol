@@ -20,7 +20,7 @@ contract DeployExecutorEthereum is Script {
     address constant DAI = 0x6B175474E89094C44Da98b954EedeAC495271d0F;
     address constant WBTC = 0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599;
     address constant USDS = 0xdC035d45D973E3Ec169D938868753234de7e3f92;
-    address constant wstETH = 0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0;
+    address constant WSTETH = 0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0;
     address constant UNI = 0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984;
 
     function run() external returns (Executor) {
@@ -39,7 +39,7 @@ contract DeployExecutorEthereum is Script {
         whitelist[3] = DAI;
         whitelist[4] = WBTC;
         whitelist[5] = USDS;
-        whitelist[6] = wstETH;
+        whitelist[6] = WSTETH;
         whitelist[7] = UNI;
 
         vm.startBroadcast(pk);
@@ -62,7 +62,7 @@ contract DeployExecutorEthereum is Script {
         console.log("DAI:", DAI, executor.whitelistedTokens(DAI));
         console.log("WBTC:", WBTC, executor.whitelistedTokens(WBTC));
         console.log("USDS:", USDS, executor.whitelistedTokens(USDS));
-        console.log("wstETH:", wstETH, executor.whitelistedTokens(wstETH));
+        console.log("wstETH:", WSTETH, executor.whitelistedTokens(WSTETH));
         console.log("UNI:", UNI, executor.whitelistedTokens(UNI));
         console.log();
 
