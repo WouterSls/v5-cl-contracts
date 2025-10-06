@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT 
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
 import {ExecutorValidation} from "../libraries/ExecutorValidation.sol";
@@ -25,9 +25,7 @@ interface ITrader {
     }
 
     struct TradeParameters {
-        address tokenIn;
         uint256 amountIn;
-        address tokenOut;
         uint256 amountOutMin;
         uint256 expiry;
         ExecutorValidation.TradeType tradeType;
