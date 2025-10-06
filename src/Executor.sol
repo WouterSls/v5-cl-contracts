@@ -4,40 +4,26 @@ pragma solidity ^0.8.20;
 import {SafeERC20} from "../lib/openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ReentrancyGuard} from "../lib/openzeppelin-contracts/contracts/utils/ReentrancyGuard.sol";
 import {IERC20} from "../lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
-import {Ownable} from "../lib/openzeppelin-contracts/contracts/access/Ownable.sol";
 
 import {ISignatureTransfer} from "../lib/permit2/src/interfaces/ISignatureTransfer.sol";
 
 import {ITrader} from "./interfaces/ITrader.sol";
-import {ITraderRegistry} from "./interfaces/ITraderRegistry.sol";
 
 import {ExecutorValidation} from "./libraries/ExecutorValidation.sol";
+import {ExecutorOwner} from "./base/ExecutorOwner.sol";
 
 /**
  * @title Executor
  * @notice Executes signed off-chain orders with validation libraries
  * @dev Clean separation of concerns with modular validation
  */
-contract Executor is ReentrancyGuard, Ownable {
+contract Executor is ReentrancyGuard, ExecutorOwner {
     using SafeERC20 for IERC20;
 
-    string private constant NAME = "EVM Trading Engine";
-    string private constant VERSION = "1";
-
     uint16 internal constant FEE_DENOMINATOR = 10_000;
-    uint16 internal constant MAX_FEE_BPS = 1_000; // 10% cap
 
-    //address private constant PERMIT2 = 0x000000000022D473030F116dDEE9F6B43aC78BA3;
     address public immutable PERMIT2;
 
-    ITraderRegistry public traderRegistry;
-    uint256 public executorFee;
-
-    mapping(address => mapping(uint256 => bool)) public usedNonce;
-    mapping(address => bool) public whitelistedTokens;
-
-    event TraderRegistryUpdated(address indexed newRegistry, address indexed updater);
-    event ExecutorFeeUpdated(uint256 newFeeBps, address indexed updater);
     event ExecutorTipped(address indexed recipient, uint256 amount);
     event TradeExecuted(
         address indexed maker,
@@ -48,17 +34,16 @@ contract Executor is ReentrancyGuard, Ownable {
         uint256 amountOut,
         uint256 amountTipped
     );
-    event TokenWhitelisted(address indexed token, address indexed updater);
-    event TokenRemovedFromWhitelist(address indexed token, address indexed updater);
 
     error InvalidTrader();
     error CallFailed();
     error InvalidRouter();
     error InsufficientOutput();
-    error InvalidFee();
+    error InvalidToken();
+    error UnauthorizedETHSender();
 
     constructor(address _permit2, address initialOwner, address[] memory initialWhitelistedTokens)
-        Ownable(initialOwner)
+        ExecutorOwner(initialOwner)
     {
         PERMIT2 = _permit2;
 
@@ -76,85 +61,39 @@ contract Executor is ReentrancyGuard, Ownable {
         external
         nonReentrant
     {
-        ExecutorValidation.validateInputsAndBusinessLogic(trade, routeData, usedNonce, msg.sender);
-        ExecutorValidation.validateRouteStructure(trade.order, routeData, whitelistedTokens);
+        ExecutorValidation.validateInputsAndBusinessLogic(trade, msg.sender);
+        ExecutorValidation.validateRouteData(trade.order, routeData, whitelistedTokens);
 
-        //ExecutorValidation.validateSignatures(trade, _domainSeparatorV4());
-        //ExecutorValidation.TradeType tradeType = ExecutorValidation.determineTradeType(trade, routeData);
-
-        //ITrader.TraderInfo memory traderInfo = traderRegistry.getTrader(routeData.protocol);
-        //ExecutorValidation.validateTrader(routeData, traderInfo);
-
-        usedNonce[trade.order.maker][trade.order.nonce] = true;
+        ITrader.TraderInfo memory traderInfo = traderRegistry.getTrader(routeData.protocol);
+        ExecutorValidation.validateTrader(routeData, traderInfo);
 
         address trader = msg.sender;
         _transferPermittedWitnessToTrader(trade, trader);
 
-        //ITrader.TradeParameters memory tradeParameters = ITrader.TradeParameters({
-        //    tokenIn: trade.orderHash.inputToken,
-        //    amountIn: trade.orderHash.inputAmount,
-        //    tokenOut: trade.orderHash.outputToken,
-        //    amountOutMin: trade.orderHash.minAmountOut,
-        //    expiry: trade.orderHash.expiry,
-        //    tradeType: tradeType,
-        //    routeData: routeData
-        //});
-
-        //uint256 amountOut = ITrader(traderInfo.implementation).trade(tradeParameters);
-
-        //if (amountOut < trade.orderHash.minAmountOut) revert InsufficientOutput();
-
-        //uint256 remainingAmount = _tipExecutor(trade.orderHash.outputToken, amountOut, tradeType);
-        //uint256 tippedAmount = amountOut - remainingAmount;
-
-        //_transferToMaker(trade.orderHash.maker, trade.orderHash.outputToken, remainingAmount, tradeType);
-
-        //emit TradeExecuted(
-        //    trade.orderHash.maker, traderInfo.implementation, trade.orderHash.inputAmount, remainingAmount, tippedAmount
-        //);
-    }
-
-    function cancelNonce(uint256 nonce) external {
-        usedNonce[msg.sender][nonce] = true;
-    }
-
-    function updateTraderRegistry(address newRegistry) external onlyOwner {
-        traderRegistry = ITraderRegistry(newRegistry);
-        address updater = msg.sender;
-        emit TraderRegistryUpdated(newRegistry, updater);
-    }
-
-    function updateExecutorFee(uint256 newFee) external onlyOwner {
-        if (newFee >= MAX_FEE_BPS) revert InvalidFee();
-        executorFee = newFee;
-        emit ExecutorFeeUpdated(newFee, msg.sender);
-    }
-
-    function addWhitelistedToken(address token) external onlyOwner {
-        whitelistedTokens[token] = true;
-        emit TokenWhitelisted(token, msg.sender);
-    }
-
-    function removeWhitelistedToken(address token) external onlyOwner {
-        whitelistedTokens[token] = false;
-        emit TokenRemovedFromWhitelist(token, msg.sender);
-    }
-
-    function addWhitelistedTokens(address[] calldata tokens) external onlyOwner {
-        for (uint256 i = 0; i < tokens.length; i++) {
-            whitelistedTokens[tokens[i]] = true;
-            emit TokenWhitelisted(tokens[i], msg.sender);
-        }
-    }
-
-    function emergencyWithdrawToken(address token, address to) external onlyOwner {
-        if (token == address(0)) {
-            uint256 bal = address(this).balance;
-            (bool sent,) = to.call{value: bal}("");
-            require(sent, "withdraw ETH failed");
-        } else {
-            IERC20(token).safeTransfer(to, IERC20(token).balanceOf(address(this)));
-        }
+        /**
+         *
+         * ExecutorValidation.TradeType tradeType = ExecutorValidation.determineTradeType(routeData);
+         * ITrader.TradeParameters memory tradeParameters = ITrader.TradeParameters({
+         *         amountIn: trade.order.inputAmount,
+         *         amountOutMin: trade.order.minAmountOut,
+         *         expiry: trade.order.expiry,
+         *         tradeType: tradeType,
+         *         routeData: routeData
+         *     });
+         *
+         *     uint256 amountOut = ITrader(traderInfo.implementation).trade(tradeParameters);
+         *
+         *     if (amountOut < trade.order.minAmountOut) revert InsufficientOutput();
+         *
+         *     uint256 remainingAmount = _tipExecutor(trade.orderHash.outputToken, amountOut, tradeType);
+         *     uint256 tippedAmount = amountOut - remainingAmount;
+         *
+         *     _transferToMaker(trade.orderHash.maker, trade.orderHash.outputToken, remainingAmount, tradeType);
+         *
+         *     emit TradeExecuted(
+         *         trade.orderHash.maker, traderInfo.implementation, trade.orderHash.inputAmount, remainingAmount,tippedAmount
+         *     );
+         */
     }
 
     function _transferPermittedWitnessToTrader(ExecutorValidation.Trade calldata trade, address trader) internal {
@@ -217,5 +156,9 @@ contract Executor is ReentrancyGuard, Ownable {
         }
     }
 
+    /**
+     * @notice Accepts ETH from trader implementations for native ETH swaps
+     * @dev Required for TOKEN_INPUT_ETH_OUTPUT trades where traders send ETH back
+     */
     receive() external payable {}
 }
