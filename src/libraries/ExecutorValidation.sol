@@ -37,11 +37,17 @@ library ExecutorValidation {
     struct RouteData {
         ITrader.Protocol protocol;
         address[] path;
-        uint24 fee;
+        uint24[] fee;
         bool isMultiHop;
         bytes encodedPath;
     }
 
+    error ZeroAddress();
+    error ZeroAmount();
+    error TokenMismatch();
+    error OrderExpired();
+    error NonceAlreadyUsed();
+    error InvalidProtocol();
     error InvalidRouteData();
     error InvalidTradeType();
 
@@ -49,9 +55,39 @@ library ExecutorValidation {
         Trade calldata trade,
         RouteData calldata routeData,
         mapping(address => mapping(uint256 => bool)) storage usedNonces
-    ) internal view {}
+    ) internal view {
+        if (trade.order.maker == address(0)) revert ZeroAddress();
+        if (trade.order.inputToken == address(0)) revert ZeroAddress();
+        if (trade.order.outputToken == address(0)) revert ZeroAddress();
+        if (trade.permit.permitted.token == address(0)) revert ZeroAddress();
 
-    function validateSignatures(Trade calldata trade, bytes32 domainSeparator) internal view {}
+        if (trade.order.inputAmount == 0) revert ZeroAmount();
+        if (trade.order.minAmountOut == 0) revert ZeroAmount();
+        if (trade.permit.permitted.amount == 0) revert ZeroAmount();
+
+        if (trade.order.inputToken != trade.permit.permitted.token) revert TokenMismatch();
+        //if (signedOrder.inputAmount != signedPermitData.transferDetails.requestedAmount) revert PermitAmountMismatch();
+        //if (signedPermitData.transferDetails.requestedAmount > signedPermitData.permit.permitted.amount) revert PermitAmountMismatch();
+
+        if (block.timestamp > trade.order.expiry) revert OrderExpired();
+        if (usedNonces[trade.order.maker][trade.order.nonce]) revert NonceAlreadyUsed();
+
+        if (uint8(routeData.protocol) > uint8(ITrader.Protocol.AERODROME)) {
+            revert InvalidProtocol();
+        }
+
+        // Route data validation
+        if (routeData.isMultiHop && routeData.encodedPath.length == 0) revert InvalidRouteData();
+        if (!routeData.isMultiHop && routeData.fee.length < 1) revert InvalidRouteData();
+        
+        if (routeData.isMultiHop) {
+            if (routeData.encodedPath.length < 43) revert InvalidRouteData();
+        } else {
+            if (routeData.fee != 100 && routeData.fee != 500 && routeData.fee != 3000 && routeData.fee != 10000) {
+                revert InvalidRouteData();
+            }
+        }
+    }
 
     function validateTrader(RouteData calldata routeData, ITrader.TraderInfo memory traderInfo) internal view {}
 
