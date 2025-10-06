@@ -19,12 +19,19 @@ contract DeployExecutorLocal is Script {
 
         vm.startBroadcast(pk);
 
-        // Deploy Executor with Permit2 address
-        Executor executor = new Executor(PERMIT2_ADDRESS, deployer);
-
-        // Deploy mock tokens
+        // Deploy mock tokens first
         ERC20Mock tokenA = new ERC20Mock();
         ERC20Mock tokenB = new ERC20Mock();
+        ERC20Mock tokenC = new ERC20Mock();
+
+        // Setup whitelist with mock tokens
+        address[] memory whitelist = new address[](3);
+        whitelist[0] = address(tokenA);
+        whitelist[1] = address(tokenB);
+        whitelist[2] = address(tokenC);
+
+        // Deploy Executor with Permit2 address and whitelist
+        Executor executor = new Executor(PERMIT2_ADDRESS, deployer, whitelist);
 
         vm.stopBroadcast();
 
@@ -42,6 +49,10 @@ contract DeployExecutorLocal is Script {
 
         console.log("TOKEN B ADDRESS:");
         console.log(address(tokenB));
+        console.log();
+
+        console.log("TOKEN C ADDRESS:");
+        console.log(address(tokenC));
         console.log();
 
         console.log("PERMIT2 ADDRESS:");
