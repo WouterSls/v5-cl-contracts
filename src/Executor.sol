@@ -34,13 +34,22 @@ contract Executor is ReentrancyGuard, Ownable {
     uint256 public executorFee;
 
     mapping(address => mapping(uint256 => bool)) public usedNonce;
+    mapping(address => bool) public whitelistedTokens;
 
     event TraderRegistryUpdated(address indexed newRegistry, address indexed updater);
     event ExecutorFeeUpdated(uint256 newFeeBps, address indexed updater);
     event ExecutorTipped(address indexed recipient, uint256 amount);
     event TradeExecuted(
-        address indexed maker, address indexed inputToken, address indexed outputToken, string traderStrat, uint256 amountIn, uint256 amountOut, uint256 amountTipped
+        address indexed maker,
+        address indexed inputToken,
+        address indexed outputToken,
+        string traderStrat,
+        uint256 amountIn,
+        uint256 amountOut,
+        uint256 amountTipped
     );
+    event TokenWhitelisted(address indexed token, address indexed updater);
+    event TokenRemovedFromWhitelist(address indexed token, address indexed updater);
 
     error InvalidTrader();
     error CallFailed();
@@ -48,8 +57,14 @@ contract Executor is ReentrancyGuard, Ownable {
     error InsufficientOutput();
     error InvalidFee();
 
-    constructor(address _permit2, address initialOwner) Ownable(initialOwner) {
+    constructor(address _permit2, address initialOwner, address[] memory initialWhitelistedTokens)
+        Ownable(initialOwner)
+    {
         PERMIT2 = _permit2;
+
+        for (uint256 i = 0; i < initialWhitelistedTokens.length; i++) {
+            whitelistedTokens[initialWhitelistedTokens[i]] = true;
+        }
     }
 
     /**
@@ -61,7 +76,9 @@ contract Executor is ReentrancyGuard, Ownable {
         external
         nonReentrant
     {
-        ExecutorValidation.validateInputsAndBusinessLogic(trade, routeData, usedNonce);
+        ExecutorValidation.validateInputsAndBusinessLogic(trade, routeData, usedNonce, msg.sender);
+        ExecutorValidation.validateRouteStructure(trade.order, routeData, whitelistedTokens);
+
         //ExecutorValidation.validateSignatures(trade, _domainSeparatorV4());
         //ExecutorValidation.TradeType tradeType = ExecutorValidation.determineTradeType(trade, routeData);
 
@@ -113,6 +130,23 @@ contract Executor is ReentrancyGuard, Ownable {
         emit ExecutorFeeUpdated(newFee, msg.sender);
     }
 
+    function addWhitelistedToken(address token) external onlyOwner {
+        whitelistedTokens[token] = true;
+        emit TokenWhitelisted(token, msg.sender);
+    }
+
+    function removeWhitelistedToken(address token) external onlyOwner {
+        whitelistedTokens[token] = false;
+        emit TokenRemovedFromWhitelist(token, msg.sender);
+    }
+
+    function addWhitelistedTokens(address[] calldata tokens) external onlyOwner {
+        for (uint256 i = 0; i < tokens.length; i++) {
+            whitelistedTokens[tokens[i]] = true;
+            emit TokenWhitelisted(tokens[i], msg.sender);
+        }
+    }
+
     function emergencyWithdrawToken(address token, address to) external onlyOwner {
         if (token == address(0)) {
             uint256 bal = address(this).balance;
@@ -136,7 +170,8 @@ contract Executor is ReentrancyGuard, Ownable {
                 trade.order.outputToken,
                 trade.order.minAmountOut,
                 trade.order.expiry,
-                trade.order.nonce
+                trade.order.nonce,
+                trade.order.authorizedExecutor
             )
         );
 
